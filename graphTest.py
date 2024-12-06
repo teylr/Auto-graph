@@ -1,9 +1,9 @@
 import tkinter as tk
-from tkinter import filedialog
-from tkinter import ttk
+from tkinter import filedialog, ttk
 import pandas as pd
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
+import numpy as np
 
 class CSVViewerApp:
     def __init__(self, root):
@@ -104,40 +104,51 @@ class CSVViewerApp:
             self.label_status.config(text=f"Error: '{self.y_column}' is not a valid column name.", fg="red")
             return
 
-        # If valid, update the status and store column names
+        # If valid, update the status
         self.label_status.config(text="Valid columns", fg="green")
 
     def graph_plot(self):
-        # Only plot if the columns are valid
-        if self.label_status.cget("text") == "Valid columns":
-            # Create a new Toplevel window to plot the graph
-            plot_window = tk.Toplevel(self.root)
-            plot_window.title("Graph")
-            plot_window.geometry("800x600")
+        # Ensure the columns are valid and data is loaded
+        if self.label_status.cget("text") != "Valid columns" or self.data is None:
+            self.label_status.config(text="Error: Cannot plot. Check your data and columns.", fg="red")
+            return
 
-            # Create a Matplotlib figure and axis
-            fig, ax = plt.subplots()
+        # Create a new window for the plot
+        plot_window = tk.Toplevel(self.root)
+        plot_window.title("Graph Plot")
 
-            # Plot the data for the selected X and Y columns
-            ax.plot(self.data[self.x_column], self.data[self.y_column])
+        # Create a Matplotlib figure and axes
+        fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
 
-            # Set labels and title
-            ax.set_xlabel(self.x_column)
-            ax.set_ylabel(self.y_column)
-            ax.set_title(f"{self.y_column} vs {self.x_column}")
+        # Extract the data for the selected columns
+        x = self.data[self.x_column]
+        y = self.data[self.y_column]
 
-            # Create a canvas to display the plot in the new window
-            canvas = FigureCanvasTkAgg(fig, master=plot_window)
-            canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        # Plot the original data as a scatter plot
+        ax.scatter(x, y, label="Data Points", color="blue", alpha=0.6)
 
-            # Redraw the canvas with the new plot
-            canvas.draw()
+        # Calculate the line of best fit
+        coefficients = np.polyfit(x, y, 1)  # 1 indicates a linear fit
+        slope, intercept = coefficients
+        trendline_y = slope * x + intercept
+
+        # Plot the trendline
+        ax.plot(x, trendline_y, label=f"Line of Best Fit (y={slope:.2f}x+{intercept:.2f})", color="red")
+
+        # Set labels, title, and legend
+        ax.set_xlabel(self.x_column)
+        ax.set_ylabel(self.y_column)
+        ax.set_title(f"{self.y_column} vs {self.x_column}")
+        ax.legend()
+
+        # Embed the Matplotlib figure into the new window
+        canvas = FigureCanvasTkAgg(fig, master=plot_window)
+        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        canvas.draw()
 
 
 # Create the Tkinter root window
 root = tk.Tk()
 app = CSVViewerApp(root)
 root.mainloop()
-
-
 
