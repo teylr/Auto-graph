@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import numpy as np
 
+
 class CSVViewerApp:
     def __init__(self, root):
         self.root = root
@@ -15,6 +16,7 @@ class CSVViewerApp:
         self.data = None  # Store the uploaded DataFrame
         self.x_column = None
         self.y_column = None
+        self.bin_num = 10  # Default bin number
 
         # Create GUI components
         self.create_widgets()
@@ -51,9 +53,9 @@ class CSVViewerApp:
         button_verify = tk.Button(self.root, text="Verify Columns", command=self.column_verify)
         button_verify.pack(pady=10)
 
-        # Plot button (to plot the graph)
-        button_plot = tk.Button(self.root, text="Plot Graph", command=self.graph_plot)
-        button_plot.pack(pady=10)
+        # Intermediate window button
+        button_gchoice = tk.Button(self.root, text="Next", command=self.open_choice_window)
+        button_gchoice.pack(pady=10)
 
     def upload_csv(self):
         # Open a file dialog to select the CSV file
@@ -107,48 +109,124 @@ class CSVViewerApp:
         # If valid, update the status
         self.label_status.config(text="Valid columns", fg="green")
 
-    def graph_plot(self):
+    def update_bin_num(self, plot_window, ax, bins_input_field):
+        # Get the user input for the number of bins
+        try:
+            self.bin_num = int(bins_input_field.get())
+            self.label_status.config(text=f"Bins updated to {self.bin_num}", fg="green")
+
+            # Clear the previous plot and re-plot with the new number of bins
+            ax.clear()
+            self.plot_histogram(ax)
+            plot_window.canvas.draw()
+
+        except ValueError:
+            self.label_status.config(text="Error: Please enter a valid number for bins.", fg="red")
+
+    def open_choice_window(self):
         # Ensure the columns are valid and data is loaded
         if self.label_status.cget("text") != "Valid columns" or self.data is None:
-            self.label_status.config(text="Error: Cannot plot. Check your data and columns.", fg="red")
+            self.label_status.config(text="Error: Cannot proceed. Check your data and columns.", fg="red")
             return
 
-        # Create a new window for the plot
+        # Create the intermediate window
+        graph_choice_window = tk.Toplevel(self.root)
+        graph_choice_window.title("Graph Types")
+        graph_choice_window.geometry("400x300")
+
+        # Label and proceed button
+        label_message = tk.Label(graph_choice_window, text="Click the button below to plot the graph.", wraplength=350)
+        label_message.pack(pady=20)
+
+        scatter_proceed = tk.Button(
+            graph_choice_window,
+            text="LINE",
+            command=lambda: (graph_choice_window.destroy(), self.graph_plot("line"))
+        )
+        scatter_proceed.pack(pady=20)
+
+        line_proceed = tk.Button(
+            graph_choice_window,
+            text="SCATTER",
+            command=lambda: (graph_choice_window.destroy(), self.graph_plot("scatter"))
+        )
+        line_proceed.pack(pady=20)
+
+        button_both = tk.Button(
+            graph_choice_window,
+            text="Scatter + Trendline",
+            command=lambda: self.graph_plot("both")
+        )
+        button_both.pack(pady=10)
+
+        histogram_proceed = tk.Button(
+            graph_choice_window,
+            text="HISTOGRAM",
+            command=lambda: (graph_choice_window.destroy(), self.graph_plot("histogram"))
+        )
+        histogram_proceed.pack(pady=20)
+
+    def graph_plot(self, plot_type):
+        if self.data is None:
+            self.label_status.config(text="Error: No data uploaded or invalid columns.", fg="red")
+            return
+
         plot_window = tk.Toplevel(self.root)
         plot_window.title("Graph Plot")
 
-        # Create a Matplotlib figure and axes
+        # Create a figure and axis
         fig, ax = plt.subplots(figsize=(6, 4), dpi=100)
 
-        # Extract the data for the selected columns
         x = self.data[self.x_column]
         y = self.data[self.y_column]
 
-        # Plot the original data as a scatter plot
-        ax.scatter(x, y, label="Data Points", color="blue", alpha=0.6)
+        # Add plot options (scatter, line, histogram, etc.)
+        if plot_type == "scatter":
+            ax.scatter(x, y, label="Data Points", color="blue", alpha=0.6)
+        elif plot_type == "line":
+            ax.plot(x, y, label="Line Plot", color="green")
+        elif plot_type == "histogram":
+            self.plot_histogram(ax)
+        elif plot_type == "both":
+            ax.scatter(x, y, label="Data Points", color="blue", alpha=0.6)
+            coefficients = np.polyfit(x, y, 1)
+            trendline_y = coefficients[0] * x + coefficients[1]
+            ax.plot(x, trendline_y, label="Trendline", color="red")
 
-        # Calculate the line of best fit
-        coefficients = np.polyfit(x, y, 1)  # 1 indicates a linear fit
-        slope, intercept = coefficients
-        trendline_y = slope * x + intercept
-
-        # Plot the trendline
-        ax.plot(x, trendline_y, label=f"Line of Best Fit (y={slope:.2f}x+{intercept:.2f})", color="red")
-
-        # Set labels, title, and legend
+        # Add Labels, Legends, etc.
         ax.set_xlabel(self.x_column)
         ax.set_ylabel(self.y_column)
-        ax.set_title(f"{self.y_column} vs {self.x_column}")
         ax.legend()
 
-        # Embed the Matplotlib figure into the new window
-        canvas = FigureCanvasTkAgg(fig, master=plot_window)
-        canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
-        canvas.draw()
+        # Create input field and button for changing bins for histogram
+        if plot_type == "histogram":
+            label_bins = tk.Label(plot_window, text="Enter Number of Bins:")
+            label_bins.pack(pady=5)
+
+            bins_input_field = tk.Entry(plot_window)
+            bins_input_field.pack(pady=5)
+            bins_input_field.insert(0, str(self.bin_num))  # Set default bin number
+
+            bin_change_button = tk.Button(plot_window, text="Change Bins",
+                                          command=lambda: self.update_bin_num(plot_window, ax, bins_input_field))
+            bin_change_button.pack(pady=10)
+
+        # Embed the plot in the window
+        plot_window.canvas = FigureCanvasTkAgg(fig, master=plot_window)
+        plot_window.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        plot_window.canvas.draw()
+
+    def plot_histogram(self, ax):
+        # Plot the histogram using the current bin number
+        y = self.data[self.y_column]
+        ax.hist(y, bins=self.bin_num, label="Histogram", color="blue", alpha=0.6)
+        ax.set_title(f"Histogram of {self.y_column}")
+        ax.set_ylabel(self.y_column)
+        ax.legend()
+        ax.grid(True)
 
 
 # Create the Tkinter root window
 root = tk.Tk()
 app = CSVViewerApp(root)
 root.mainloop()
-
